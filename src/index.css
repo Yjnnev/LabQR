@@ -201,7 +201,9 @@ button:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.8rem 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.8rem 1.2rem;
   background: white;
   border-bottom: 1px solid #e5e5e5;
 }
@@ -216,7 +218,8 @@ button:hover {
 .app-header-user {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.6rem;
   font-size: 0.9rem;
 }
 
@@ -225,6 +228,10 @@ button:hover {
   align-items: center;
   gap: 0.4rem;
   color: #374151;
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .role-tag {
@@ -348,10 +355,12 @@ button:hover {
   display: flex;
   gap: 0.6rem;
   margin: 1rem 0 1.5rem;
+  flex-wrap: wrap;
 }
 
 .browse-controls input {
   flex: 1;
+  min-width: 0;
   padding: 0.55rem 0.8rem;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -363,6 +372,16 @@ button:hover {
   border: 1px solid #ccc;
   border-radius: 6px;
   font-size: 0.95rem;
+}
+
+@media (max-width: 480px) {
+  .browse-controls {
+    flex-direction: column;
+  }
+  .browse-controls input,
+  .browse-controls select {
+    width: 100%;
+  }
 }
 
 .browse-grid {
