@@ -33,17 +33,28 @@ export default function ItemPage() {
       setEquipment(data)
       setLoading(false)
 
-      // log this scan — this row is what the notify-admin webhook watches
-      await supabase.from('usage_logs').insert({
-        equipment_id: id,
-        user_id: session.user.id,
-        action: 'viewed',
-      })
+      // only log a view if someone's actually signed in — guests can browse
+      // freely, but we can't attribute a log entry to nobody
+      if (session?.user) {
+        await supabase.from('usage_logs').insert({
+          equipment_id: id,
+          user_id: session.user.id,
+          action: 'viewed',
+        })
+      }
     }
 
     loadItem()
     return () => { cancelled = true }
   }, [id, session])
+
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    })
+    if (error) console.error('Login error:', error.message)
+  }
 
   const handleAction = async (action) => {
     setActionError(null)
@@ -86,17 +97,30 @@ export default function ItemPage() {
         {equipment.notes && <p className="item-notes">{equipment.notes}</p>}
 
         <div className="item-card-actions">
-          {equipment.status === 'available' && (
+          {!session && equipment.status === 'available' && (
+            <>
+              <p className="status-text-inline">Sign in to check out this item.</p>
+              <div className="guest-auth-buttons">
+                <button onClick={handleGoogleLogin}>Sign in</button>
+                <button onClick={handleGoogleLogin}>Sign up</button>
+              </div>
+            </>
+          )}
+
+          {session && equipment.status === 'available' && (
             <button onClick={() => handleAction('checked_out')}>Check out</button>
           )}
+
           {equipment.status === 'in_use' && (
             <p className="status-text-inline">
               This item is currently checked out. An admin will process the return.
             </p>
           )}
+
           {equipment.status !== 'available' && equipment.status !== 'in_use' && (
             <p className="error-text">This item isn't available for checkout right now.</p>
           )}
+
           {actionError && <p className="error-text">{actionError}</p>}
         </div>
       </div>

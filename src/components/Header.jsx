@@ -20,7 +20,6 @@ export default function Header() {
       <div className="app-header-user">
         {session ? (
           <>
-            <Link to="/browse" className="app-header-link">Browse Equipment</Link>
             {profile?.role === 'admin' && (
               <Link to="/admin" className="app-header-link">Admin Dashboard</Link>
             )}
@@ -31,7 +30,10 @@ export default function Header() {
             <button onClick={signOut}>Log out</button>
           </>
         ) : (
-          <button onClick={handleGoogleLogin}>Log in</button>
+          <>
+            <button onClick={handleGoogleLogin}>Sign in</button>
+            <button onClick={handleGoogleLogin}>Sign up</button>
+          </>
         )}
       </div>
     </header>

@@ -248,6 +248,23 @@ button:hover {
   padding: 0.35rem 0.8rem;
 }
 
+.app-header-user button + button {
+  background: white;
+  color: #2563eb;
+  border: 1px solid #2563eb;
+}
+
+.guest-auth-buttons {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.guest-auth-buttons button:last-child {
+  background: white;
+  color: #2563eb;
+  border: 1px solid #2563eb;
+}
+
 .app-header-link {
   font-size: 0.9rem;
   color: #2563eb;
