@@ -2,6 +2,10 @@
 
 A QR-code-based lab equipment inventory and monitoring system. Students scan a QR code (or browse the web app directly) to check equipment in and out; admins manage the equipment catalog and process returns.
 
+[![Status](https://img.shields.io/badge/status-live-brightgreen)](https://labqr-six.vercel.app)
+
+**Live site:** https://labqr-six.vercel.app
+
 ---
 
 ## Table of contents
