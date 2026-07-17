@@ -31,7 +31,7 @@ export default function Header() {
           </>
         ) : (
           <>
-            <button onClick={handleGoogleLogin}>Sign in</button>
+            <button onClick={handleGoogleLogin}>Log in</button>
             <button onClick={handleGoogleLogin}>Sign up</button>
           </>
         )}
