@@ -1,9 +1,10 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Header() {
   const { session, profile, signOut } = useAuth()
+  const navigate = useNavigate()
 
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -11,6 +12,11 @@ export default function Header() {
       options: { redirectTo: window.location.href },
     })
     if (error) console.error('Login error:', error.message)
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/')
   }
 
   return (
@@ -27,11 +33,11 @@ export default function Header() {
               {profile?.full_name || session.user.email}
               {profile?.role === 'admin' && <span className="role-tag">Admin</span>}
             </span>
-            <button onClick={signOut}>Log out</button>
+            <button onClick={handleSignOut}>Log out</button>
           </>
         ) : (
           <>
-            <button onClick={handleGoogleLogin}>Log in</button>
+            <button onClick={handleGoogleLogin}>Sign in</button>
             <button onClick={handleGoogleLogin}>Sign up</button>
           </>
         )}
