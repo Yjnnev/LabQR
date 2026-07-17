@@ -2,8 +2,9 @@
 // Deploy with: npx supabase functions deploy notify-admin
 // Set secrets first:
 //   npx supabase secrets set RESEND_API_KEY=your_resend_key
-//   npx supabase secrets set ADMIN_EMAIL=admin@yourschool.edu
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically — no need to set them.
+// (ADMIN_EMAIL is no longer required — admin recipients are pulled live from
+// the profiles table, so adding a new admin there is all you need to do.)
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -12,21 +13,20 @@ Deno.serve(async (req) => {
     const payload = await req.json()
     const record = payload.record
 
-    // Only alert on real checkout activity — skip page views entirely.
     if (record.action !== 'checked_out' && record.action !== 'returned') {
       return new Response('Skipped (not a checkout/return event)', { status: 200 })
     }
 
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-    const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL')
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
     const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
-    const [{ data: equipment }, { data: studentProfile }] = await Promise.all([
+    const [{ data: equipment }, { data: studentProfile }, { data: admins }] = await Promise.all([
       supabase.from('equipment').select('name, location').eq('id', record.equipment_id).single(),
       supabase.from('profiles').select('full_name, email').eq('id', record.user_id).single(),
+      supabase.from('profiles').select('email').eq('role', 'admin'),
     ])
 
     const studentName = studentProfile?.full_name || studentProfile?.email || 'A student'
@@ -35,9 +35,14 @@ Deno.serve(async (req) => {
     const when = new Date(record.created_at).toLocaleString()
 
     const isReturn = record.action === 'returned'
-    const recipient = isReturn ? studentProfile?.email : ADMIN_EMAIL
 
-    if (!recipient) {
+    // returns notify the student; checkouts notify every admin on file
+    const recipient = isReturn
+      ? studentProfile?.email
+      : (admins || []).map((a) => a.email).filter(Boolean)
+
+    const hasRecipient = isReturn ? !!recipient : recipient.length > 0
+    if (!hasRecipient) {
       return new Response('Skipped (no recipient email found)', { status: 200 })
     }
 
