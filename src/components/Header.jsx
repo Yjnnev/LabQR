@@ -1,18 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabaseClient'
+import { signInWithGoogle } from '../lib/authActions'
 
 export default function Header() {
   const { session, profile, signOut } = useAuth()
   const navigate = useNavigate()
-
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href },
-    })
-    if (error) console.error('Login error:', error.message)
-  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -37,8 +29,8 @@ export default function Header() {
           </>
         ) : (
           <>
-            <button onClick={handleGoogleLogin}>Sign in</button>
-            <button onClick={handleGoogleLogin}>Sign up</button>
+            <button onClick={() => signInWithGoogle()}>Sign in</button>
+            <button onClick={() => signInWithGoogle()}>Sign up</button>
           </>
         )}
       </div>

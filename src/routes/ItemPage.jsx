@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABELS } from '../lib/statusLabels'
+import { signInWithGoogle } from '../lib/authActions'
 
 export default function ItemPage() {
   const { id } = useParams()
@@ -47,14 +48,6 @@ export default function ItemPage() {
     loadItem()
     return () => { cancelled = true }
   }, [id, session])
-
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href },
-    })
-    if (error) console.error('Login error:', error.message)
-  }
 
   const handleAction = async (action) => {
     setActionError(null)
@@ -101,8 +94,8 @@ export default function ItemPage() {
             <>
               <p className="status-text-inline">Sign in to check out this item.</p>
               <div className="guest-auth-buttons">
-                <button onClick={handleGoogleLogin}>Sign in</button>
-                <button onClick={handleGoogleLogin}>Sign up</button>
+                <button onClick={() => signInWithGoogle()}>Sign in</button>
+                <button onClick={() => signInWithGoogle()}>Sign up</button>
               </div>
             </>
           )}
