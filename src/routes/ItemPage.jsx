@@ -33,16 +33,6 @@ export default function ItemPage() {
 
       setEquipment(data)
       setLoading(false)
-
-      // only log a view if someone's actually signed in — guests can browse
-      // freely, but we can't attribute a log entry to nobody
-      if (session?.user) {
-        await supabase.from('usage_logs').insert({
-          equipment_id: id,
-          user_id: session.user.id,
-          action: 'viewed',
-        })
-      }
     }
 
     loadItem()
