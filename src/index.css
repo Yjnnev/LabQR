@@ -3,10 +3,15 @@
   font-family: system-ui, sans-serif;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: #f7f7f8;
   color: #1a1a1a;
+  overflow-x: hidden;
 }
 
 .status-text, .item-page {
