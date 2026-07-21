@@ -85,7 +85,7 @@ export default function AdminDashboard() {
       <form onSubmit={handleSubmit} className="equipment-form">
         <input name="name" placeholder="Name" value={form.name} onChange={handleChange} required />
         <input name="category" placeholder="Category" value={form.category} onChange={handleChange} />
-        <input name="serial_number" placeholder="Serial number" value={form.serial_number} onChange={handleChange} />
+        <input name="Count" placeholder="Count" value={form.serial_number} onChange={handleChange} />
         <select name="status" value={form.status} onChange={handleChange}>
           <option value="available">Available</option>
           <option value="in_use">In use</option>
