@@ -74,7 +74,7 @@ export default function ItemPage() {
             <div><dt>Category</dt><dd>{equipment.category}</dd></div>
           )}
           <div><dt>Location</dt><dd>{equipment.location || '—'}</dd></div>
-          <div><dt>Serial #</dt><dd>{equipment.serial_number || '—'}</dd></div>
+          <div><dt>Current Item Count</dt><dd>{equipment.serial_number || '—'}</dd></div>
         </dl>
 
         {equipment.notes && <p className="item-notes">{equipment.notes}</p>}
