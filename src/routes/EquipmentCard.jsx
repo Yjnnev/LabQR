@@ -16,6 +16,7 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
         </span>
       </div>
 
+      <p> BANANA CAKE </p>
       <dl className="equipment-meta">
         {item.category && (
           <div><dt>CAKE</dt><dd>{item.category}</dd></div>
