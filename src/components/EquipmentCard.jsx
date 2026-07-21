@@ -24,7 +24,7 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
           <div><dt>Location</dt><dd>{item.location}</dd></div>
         )}
         {item.serial_number && (
-          <div><dt>Serial #</dt><dd>{item.serial_number}</dd></div>
+          <div><dt>Item Count</dt><dd>{item.serial_number}</dd></div>
         )}
       </dl>
 
