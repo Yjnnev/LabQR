@@ -18,7 +18,7 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
 
       <dl className="equipment-meta">
         {item.category && (
-          <div><dt>Category</dt><dd>{item.category}</dd></div>
+          <div><dt>CAKE</dt><dd>{item.category}</dd></div>
         )}
         {item.location && (
           <div><dt>Location</dt><dd>{item.location}</dd></div>
