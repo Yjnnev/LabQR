@@ -54,6 +54,15 @@ button:hover {
   font-size: 0.95rem;
 }
 
+.equipment-form textarea {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
 .form-actions {
   display: flex;
   gap: 0.5rem;
@@ -331,6 +340,7 @@ button:hover {
   font-size: 0.9rem;
   color: #374151;
   margin: 0;
+  white-space: pre-wrap;
 }
 
 .item-card-actions {

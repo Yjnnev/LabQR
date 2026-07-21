@@ -93,7 +93,7 @@ export default function AdminDashboard() {
           <option value="decommissioned">Decommissioned</option>
         </select>
         <input name="location" placeholder="Location" value={form.location} onChange={handleChange} />
-        <input name="notes" placeholder="Notes" value={form.notes} onChange={handleChange} />
+        <textarea name="notes" placeholder="Notes" value={form.notes} onChange={handleChange} rows={3} />
 
         <div className="form-actions">
           <button type="submit">{editingId ? 'Update item' : 'Add item'}</button>
