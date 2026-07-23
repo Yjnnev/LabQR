@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import EquipmentCard from '../components/EquipmentCard'
+import ThumbnailCropper from '../components/ThumbnailCropper'
 
 const emptyForm = {
   name: '',
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [galleryFiles, setGalleryFiles] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [pendingCropFile, setPendingCropFile] = useState(null)
 
   const loadItems = async () => {
     const { data, error } = await supabase
@@ -80,6 +82,7 @@ export default function AdminDashboard() {
       setForm(emptyForm)
       setThumbnailFile(null)
       setGalleryFiles([])
+      setPendingCropFile(null)
       setEditingId(null)
       loadItems()
     } catch (err) {
@@ -101,6 +104,7 @@ export default function AdminDashboard() {
     setEditingId(null)
     setThumbnailFile(null)
     setGalleryFiles([])
+    setPendingCropFile(null)
   }
 
   const handleDelete = async (id) => {
@@ -141,8 +145,11 @@ export default function AdminDashboard() {
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => setThumbnailFile(e.target.files[0] || null)}
+            onChange={(e) => setPendingCropFile(e.target.files[0] || null)}
           />
+          {thumbnailFile && (
+            <span className="file-field-status">✓ Thumbnail cropped and ready to upload</span>
+          )}
         </label>
 
         <label className="file-field">
@@ -164,6 +171,17 @@ export default function AdminDashboard() {
       </form>
 
       {errorMsg && <p className="error-text">{errorMsg}</p>}
+
+      {pendingCropFile && (
+        <ThumbnailCropper
+          imageFile={pendingCropFile}
+          onCancel={() => setPendingCropFile(null)}
+          onCropComplete={(croppedFile) => {
+            setThumbnailFile(croppedFile)
+            setPendingCropFile(null)
+          }}
+        />
+      )}
 
       <div className="equipment-grid">
         {items.map((item) => (

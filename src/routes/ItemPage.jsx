@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABELS } from '../lib/statusLabels'
 import { signInWithGoogle } from '../lib/authActions'
+import PhotoGalleryModal from '../components/PhotoGalleryModal'
 
 export default function ItemPage() {
   const { id } = useParams()
@@ -12,6 +13,7 @@ export default function ItemPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
+  const [galleryIndex, setGalleryIndex] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -85,10 +87,10 @@ export default function ItemPage() {
 
         {equipment.photo_urls && equipment.photo_urls.length > 0 && (
           <div className="item-photo-gallery">
-            {equipment.photo_urls.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer">
+            {equipment.photo_urls.map((url, i) => (
+              <button key={url} className="gallery-thumb-button" onClick={() => setGalleryIndex(i)}>
                 <img src={url} alt={`${equipment.name} additional view`} />
-              </a>
+              </button>
             ))}
           </div>
         )}
@@ -121,6 +123,14 @@ export default function ItemPage() {
           {actionError && <p className="error-text">{actionError}</p>}
         </div>
       </div>
+
+      {galleryIndex !== null && (
+        <PhotoGalleryModal
+          photos={equipment.photo_urls}
+          startIndex={galleryIndex}
+          onClose={() => setGalleryIndex(null)}
+        />
+      )}
     </div>
   )
 }
