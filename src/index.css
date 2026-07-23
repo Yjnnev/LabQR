@@ -383,6 +383,73 @@ button:hover {
   font-size: 0.8rem;
 }
 
+.photo-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.photo-manager-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.existing-photo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.existing-photo img {
+  width: 100px;
+  height: 75px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.existing-photo button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  background: #dc2626;
+}
+
+.existing-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.existing-gallery-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.existing-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.existing-gallery-item button {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  background: #dc2626;
+  color: white;
+  border-radius: 999px;
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.7rem;
+  padding: 0;
+  line-height: 1;
+}
+
 /* Modal overlay, shared by the crop dialog and photo gallery */
 
 .modal-overlay {

@@ -44,7 +44,7 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
 
         <div className="equipment-card-actions">
           <button onClick={() => onEdit(item)}>Edit</button>
-          <button onClick={() => onDelete(item.id)}>Delete</button>
+          <button onClick={() => onDelete(item)}>Delete</button>
           {item.status === 'in_use' && (
             <button onClick={() => onMarkReturned(item.id)}>Mark Returned</button>
           )}

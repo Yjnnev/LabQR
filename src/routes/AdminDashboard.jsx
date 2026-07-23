@@ -10,8 +10,6 @@ const emptyForm = {
   status: 'available',
   location: '',
   notes: '',
-  thumbnail_url: null,
-  photo_urls: [],
 }
 
 // uploads one file to the equipment-photos bucket and returns its public URL
@@ -27,14 +25,39 @@ async function uploadPhoto(file) {
   return data.publicUrl
 }
 
+// pulls the storage path back out of a public URL so we can delete the file
+function extractStoragePath(url) {
+  const marker = '/equipment-photos/'
+  const idx = url.indexOf(marker)
+  if (idx === -1) return null
+  return url.slice(idx + marker.length)
+}
+
+async function deletePhotoFile(url) {
+  const path = extractStoragePath(url)
+  if (!path) return
+  await supabase.storage.from('equipment-photos').remove([path])
+}
+
 export default function AdminDashboard() {
   const [items, setItems] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [uploading, setUploading] = useState(false)
+
+  // the untouched snapshot of what was saved when editing started — used to
+  // figure out what got removed/replaced, so we know what to delete from storage
+  const [originalThumbnail, setOriginalThumbnail] = useState(null)
+  const [originalGalleryUrls, setOriginalGalleryUrls] = useState([])
+
+  // the live, editable state shown in the form
+  const [existingThumbnail, setExistingThumbnail] = useState(null)
+  const [existingGalleryUrls, setExistingGalleryUrls] = useState([])
+
+  // newly picked files, not yet uploaded
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [galleryFiles, setGalleryFiles] = useState([])
-  const [uploading, setUploading] = useState(false)
   const [pendingCropFile, setPendingCropFile] = useState(null)
 
   const loadItems = async () => {
@@ -51,6 +74,16 @@ export default function AdminDashboard() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
+  const resetPhotoState = () => {
+    setThumbnailFile(null)
+    setGalleryFiles([])
+    setPendingCropFile(null)
+    setExistingThumbnail(null)
+    setExistingGalleryUrls([])
+    setOriginalThumbnail(null)
+    setOriginalGalleryUrls([])
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMsg(null)
@@ -58,17 +91,27 @@ export default function AdminDashboard() {
 
     try {
       const { name, category, serial_number, status, location, notes } = form
-      let { thumbnail_url, photo_urls } = form
 
-      // only upload if the admin actually picked new files — otherwise
-      // keep whatever URLs were already saved (important when editing)
+      let thumbnail_url = existingThumbnail
+
       if (thumbnailFile) {
+        // a new thumbnail is replacing whatever was there before
         thumbnail_url = await uploadPhoto(thumbnailFile)
+        if (originalThumbnail) await deletePhotoFile(originalThumbnail)
+      } else if (originalThumbnail && !existingThumbnail) {
+        // the thumbnail was removed without a replacement
+        await deletePhotoFile(originalThumbnail)
       }
+
+      let photo_urls = existingGalleryUrls
       if (galleryFiles.length > 0) {
         const uploaded = await Promise.all(galleryFiles.map(uploadPhoto))
-        photo_urls = [...(photo_urls || []), ...uploaded]
+        photo_urls = [...photo_urls, ...uploaded]
       }
+
+      // clean up any gallery photos that were removed and never re-added
+      const removedGalleryUrls = originalGalleryUrls.filter((u) => !photo_urls.includes(u))
+      await Promise.all(removedGalleryUrls.map(deletePhotoFile))
 
       const payload = { name, category, serial_number, status, location, notes, thumbnail_url, photo_urls }
 
@@ -80,9 +123,7 @@ export default function AdminDashboard() {
       if (error) throw error
 
       setForm(emptyForm)
-      setThumbnailFile(null)
-      setGalleryFiles([])
-      setPendingCropFile(null)
+      resetPhotoState()
       setEditingId(null)
       loadItems()
     } catch (err) {
@@ -93,25 +134,44 @@ export default function AdminDashboard() {
   }
 
   const handleEdit = (item) => {
-    setForm({ ...emptyForm, ...item })
+    setForm({
+      name: item.name || '',
+      category: item.category || '',
+      serial_number: item.serial_number || '',
+      status: item.status || 'available',
+      location: item.location || '',
+      notes: item.notes || '',
+    })
     setEditingId(item.id)
     setThumbnailFile(null)
     setGalleryFiles([])
+    setPendingCropFile(null)
+    setExistingThumbnail(item.thumbnail_url || null)
+    setExistingGalleryUrls(item.photo_urls || [])
+    setOriginalThumbnail(item.thumbnail_url || null)
+    setOriginalGalleryUrls(item.photo_urls || [])
   }
 
   const handleCancelEdit = () => {
     setForm(emptyForm)
     setEditingId(null)
-    setThumbnailFile(null)
-    setGalleryFiles([])
-    setPendingCropFile(null)
+    resetPhotoState()
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (item) => {
     if (!confirm('Delete this item permanently?')) return
-    const { error } = await supabase.from('equipment').delete().eq('id', id)
-    if (error) setErrorMsg(error.message)
-    else loadItems()
+
+    const { error } = await supabase.from('equipment').delete().eq('id', item.id)
+    if (error) {
+      setErrorMsg(error.message)
+      return
+    }
+
+    // clean up its photos from storage too, now that the row is gone
+    const filesToDelete = [item.thumbnail_url, ...(item.photo_urls || [])].filter(Boolean)
+    await Promise.all(filesToDelete.map(deletePhotoFile))
+
+    loadItems()
   }
 
   const handleMarkReturned = async (id) => {
@@ -121,6 +181,10 @@ export default function AdminDashboard() {
     })
     if (error) setErrorMsg(error.message)
     else loadItems()
+  }
+
+  const removeExistingGalleryPhoto = (url) => {
+    setExistingGalleryUrls((prev) => prev.filter((u) => u !== url))
   }
 
   return (
@@ -140,27 +204,64 @@ export default function AdminDashboard() {
         <input name="location" placeholder="Location" value={form.location} onChange={handleChange} />
         <textarea name="notes" placeholder="Notes" value={form.notes} onChange={handleChange} rows={3} />
 
-        <label className="file-field">
-          Thumbnail photo (shown on the card)
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPendingCropFile(e.target.files[0] || null)}
-          />
-          {thumbnailFile && (
-            <span className="file-field-status">✓ Thumbnail cropped and ready to upload</span>
-          )}
-        </label>
+        {/* Thumbnail management */}
+        <div className="photo-manager">
+          <span className="photo-manager-label">Thumbnail</span>
 
-        <label className="file-field">
-          Additional photos (shown on the item page)
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setGalleryFiles(Array.from(e.target.files))}
-          />
-        </label>
+          {existingThumbnail && !thumbnailFile && (
+            <div className="existing-photo">
+              <img src={existingThumbnail} alt="Current thumbnail" />
+              <button type="button" onClick={() => setExistingThumbnail(null)}>Remove</button>
+            </div>
+          )}
+
+          {thumbnailFile && (
+            <div className="existing-photo">
+              <img src={URL.createObjectURL(thumbnailFile)} alt="New thumbnail (cropped)" />
+              <button type="button" onClick={() => setThumbnailFile(null)}>Undo</button>
+            </div>
+          )}
+
+          <label className="file-field">
+            {existingThumbnail || thumbnailFile ? 'Replace thumbnail' : 'Upload a thumbnail'}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPendingCropFile(e.target.files[0] || null)}
+            />
+          </label>
+        </div>
+
+        {/* Gallery photo management */}
+        <div className="photo-manager">
+          <span className="photo-manager-label">Additional photos</span>
+
+          {existingGalleryUrls.length > 0 && (
+            <div className="existing-gallery">
+              {existingGalleryUrls.map((url) => (
+                <div key={url} className="existing-gallery-item">
+                  <img src={url} alt="Existing" />
+                  <button type="button" onClick={() => removeExistingGalleryPhoto(url)}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label className="file-field">
+            Add more photos
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => setGalleryFiles(Array.from(e.target.files))}
+            />
+          </label>
+          {galleryFiles.length > 0 && (
+            <span className="file-field-status">
+              {galleryFiles.length} new photo{galleryFiles.length > 1 ? 's' : ''} ready to upload
+            </span>
+          )}
+        </div>
 
         <div className="form-actions">
           <button type="submit" disabled={uploading}>
