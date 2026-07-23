@@ -9,6 +9,10 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
 
   return (
     <div className="equipment-card">
+      {item.thumbnail_url && (
+        <img src={item.thumbnail_url} alt={item.name} className="equipment-card-thumbnail" />
+      )}
+
       <div className="equipment-card-header">
         <h3>{item.name}</h3>
         <span className={`status-pill status-${item.status}`}>

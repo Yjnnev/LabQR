@@ -9,6 +9,21 @@ const emptyForm = {
   status: 'available',
   location: '',
   notes: '',
+  thumbnail_url: null,
+  photo_urls: [],
+}
+
+// uploads one file to the equipment-photos bucket and returns its public URL
+async function uploadPhoto(file) {
+  const path = `${crypto.randomUUID()}-${file.name}`
+  const { error: uploadError } = await supabase.storage
+    .from('equipment-photos')
+    .upload(path, file)
+
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('equipment-photos').getPublicUrl(path)
+  return data.publicUrl
 }
 
 export default function AdminDashboard() {
@@ -16,9 +31,11 @@ export default function AdminDashboard() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [thumbnailFile, setThumbnailFile] = useState(null)
+  const [galleryFiles, setGalleryFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
 
   const loadItems = async () => {
-    // embed the borrower's profile (email) via the checked_out_by foreign key
     const { data, error } = await supabase
       .from('equipment')
       .select('*, borrower:profiles!checked_out_by(email, full_name)')
@@ -35,31 +52,55 @@ export default function AdminDashboard() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMsg(null)
+    setUploading(true)
 
-    // don't send read-only/joined fields back on update
-    const { name, category, serial_number, status, location, notes } = form
-    const payload = { name, category, serial_number, status, location, notes }
+    try {
+      const { name, category, serial_number, status, location, notes } = form
+      let { thumbnail_url, photo_urls } = form
 
-    const action = editingId
-      ? supabase.from('equipment').update(payload).eq('id', editingId)
-      : supabase.from('equipment').insert(payload)
+      // only upload if the admin actually picked new files — otherwise
+      // keep whatever URLs were already saved (important when editing)
+      if (thumbnailFile) {
+        thumbnail_url = await uploadPhoto(thumbnailFile)
+      }
+      if (galleryFiles.length > 0) {
+        const uploaded = await Promise.all(galleryFiles.map(uploadPhoto))
+        photo_urls = [...(photo_urls || []), ...uploaded]
+      }
 
-    const { error } = await action
-    if (error) return setErrorMsg(error.message)
+      const payload = { name, category, serial_number, status, location, notes, thumbnail_url, photo_urls }
 
-    setForm(emptyForm)
-    setEditingId(null)
-    loadItems()
+      const action = editingId
+        ? supabase.from('equipment').update(payload).eq('id', editingId)
+        : supabase.from('equipment').insert(payload)
+
+      const { error } = await action
+      if (error) throw error
+
+      setForm(emptyForm)
+      setThumbnailFile(null)
+      setGalleryFiles([])
+      setEditingId(null)
+      loadItems()
+    } catch (err) {
+      setErrorMsg(err.message)
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleEdit = (item) => {
-    setForm(item)
+    setForm({ ...emptyForm, ...item })
     setEditingId(item.id)
+    setThumbnailFile(null)
+    setGalleryFiles([])
   }
 
   const handleCancelEdit = () => {
     setForm(emptyForm)
     setEditingId(null)
+    setThumbnailFile(null)
+    setGalleryFiles([])
   }
 
   const handleDelete = async (id) => {
@@ -95,8 +136,29 @@ export default function AdminDashboard() {
         <input name="location" placeholder="Location" value={form.location} onChange={handleChange} />
         <textarea name="notes" placeholder="Notes" value={form.notes} onChange={handleChange} rows={3} />
 
+        <label className="file-field">
+          Thumbnail photo (shown on the card)
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setThumbnailFile(e.target.files[0] || null)}
+          />
+        </label>
+
+        <label className="file-field">
+          Additional photos (shown on the item page)
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => setGalleryFiles(Array.from(e.target.files))}
+          />
+        </label>
+
         <div className="form-actions">
-          <button type="submit">{editingId ? 'Update item' : 'Add item'}</button>
+          <button type="submit" disabled={uploading}>
+            {uploading ? 'Saving…' : editingId ? 'Update item' : 'Add item'}
+          </button>
           {editingId && <button type="button" onClick={handleCancelEdit}>Cancel</button>}
         </div>
       </form>

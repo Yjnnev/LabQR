@@ -13,7 +13,7 @@ export default function BrowseEquipment() {
     async function loadItems() {
       const { data, error } = await supabase
         .from('equipment')
-        .select('id, name, category, status, location, serial_number')
+        .select('id, name, category, status, location, serial_number, thumbnail_url')
         .order('name', { ascending: true })
 
       if (error) setError(error.message)

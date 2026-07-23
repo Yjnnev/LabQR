@@ -62,6 +62,10 @@ export default function ItemPage() {
     <div className="item-page">
       <Link to="/browse" className="back-button">← Back to all equipment</Link>
       <div className="item-card">
+        {equipment.thumbnail_url && (
+          <img src={equipment.thumbnail_url} alt={equipment.name} className="item-hero-photo" />
+        )}
+
         <div className="item-card-header">
           <h1>{equipment.name}</h1>
           <span className={`status-pill status-${equipment.status}`}>
@@ -78,6 +82,16 @@ export default function ItemPage() {
         </dl>
 
         {equipment.notes && <p className="item-notes">{equipment.notes}</p>}
+
+        {equipment.photo_urls && equipment.photo_urls.length > 0 && (
+          <div className="item-photo-gallery">
+            {equipment.photo_urls.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer">
+                <img src={url} alt={`${equipment.name} additional view`} />
+              </a>
+            ))}
+          </div>
+        )}
 
         <div className="item-card-actions">
           {!session && equipment.status === 'available' && (
