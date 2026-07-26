@@ -1,11 +1,9 @@
 import QRCodeCell from './QRCodeCell'
 import { STATUS_LABELS } from '../lib/statusLabels'
 
-export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }) {
-  const borrowerEmail = item.borrower?.email
-  const borrowedAt = item.checked_out_at
-    ? new Date(item.checked_out_at).toLocaleString()
-    : null
+export default function EquipmentCard({ item, checkouts, onEdit, onDelete, onReturnCheckout }) {
+  const checkedOutQuantity = checkouts.reduce((sum, c) => sum + c.quantity, 0)
+  const available = item.total_quantity - checkedOutQuantity
 
   return (
     <div className="equipment-card">
@@ -27,15 +25,21 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
         {item.location && (
           <div><dt>Location</dt><dd>{item.location}</dd></div>
         )}
-        {item.serial_number && (
-          <div><dt>Current Item Count</dt><dd>{item.serial_number}</dd></div>
-        )}
+        <div><dt>In stock</dt><dd>{available} / {item.total_quantity} available</dd></div>
       </dl>
 
-      {item.status === 'in_use' && borrowerEmail && (
+      {checkouts.length > 0 && (
         <div className="borrower-info">
-          <p><strong>Checked out by:</strong> {borrowerEmail}</p>
-          <p><strong>Since:</strong> {borrowedAt}</p>
+          <strong>Currently checked out:</strong>
+          {checkouts.map((c) => (
+            <div key={c.id} className="checkout-row">
+              <span>
+                {c.borrower?.email || 'Unknown'} — {c.quantity}
+                {' '}(since {new Date(c.checked_out_at).toLocaleDateString()})
+              </span>
+              <button onClick={() => onReturnCheckout(c.id)}>Mark Returned</button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -45,9 +49,6 @@ export default function EquipmentCard({ item, onEdit, onDelete, onMarkReturned }
         <div className="equipment-card-actions">
           <button onClick={() => onEdit(item)}>Edit</button>
           <button onClick={() => onDelete(item)}>Delete</button>
-          {item.status === 'in_use' && (
-            <button onClick={() => onMarkReturned(item.id)}>Mark Returned</button>
-          )}
         </div>
       </div>
     </div>

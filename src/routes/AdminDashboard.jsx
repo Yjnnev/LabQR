@@ -6,7 +6,7 @@ import ThumbnailCropper from '../components/ThumbnailCropper'
 const emptyForm = {
   name: '',
   category: '',
-  serial_number: '',
+  total_quantity: 1,
   status: 'available',
   location: '',
   notes: '',
@@ -60,14 +60,33 @@ export default function AdminDashboard() {
   const [galleryFiles, setGalleryFiles] = useState([])
   const [pendingCropFile, setPendingCropFile] = useState(null)
 
+  const [checkoutsByEquipment, setCheckoutsByEquipment] = useState({})
+
   const loadItems = async () => {
     const { data, error } = await supabase
       .from('equipment')
-      .select('*, borrower:profiles!checked_out_by(email, full_name)')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (error) setErrorMsg(error.message)
     else setItems(data)
+
+    const { data: activeCheckouts, error: checkoutError } = await supabase
+      .from('checkouts')
+      .select('id, equipment_id, quantity, checked_out_at, borrower:profiles!user_id(email, full_name)')
+      .is('returned_at', null)
+
+    if (checkoutError) {
+      setErrorMsg(checkoutError.message)
+      return
+    }
+
+    const grouped = {}
+    for (const checkout of activeCheckouts) {
+      if (!grouped[checkout.equipment_id]) grouped[checkout.equipment_id] = []
+      grouped[checkout.equipment_id].push(checkout)
+    }
+    setCheckoutsByEquipment(grouped)
   }
 
   useEffect(() => { loadItems() }, [])
@@ -90,7 +109,7 @@ export default function AdminDashboard() {
     setUploading(true)
 
     try {
-      const { name, category, serial_number, status, location, notes } = form
+      const { name, category, total_quantity, status, location, notes } = form
 
       let thumbnail_url = existingThumbnail
 
@@ -113,7 +132,11 @@ export default function AdminDashboard() {
       const removedGalleryUrls = originalGalleryUrls.filter((u) => !photo_urls.includes(u))
       await Promise.all(removedGalleryUrls.map(deletePhotoFile))
 
-      const payload = { name, category, serial_number, status, location, notes, thumbnail_url, photo_urls }
+      const payload = {
+        name, category, status, location, notes,
+        total_quantity: parseInt(total_quantity, 10) || 1,
+        thumbnail_url, photo_urls,
+      }
 
       const action = editingId
         ? supabase.from('equipment').update(payload).eq('id', editingId)
@@ -137,7 +160,7 @@ export default function AdminDashboard() {
     setForm({
       name: item.name || '',
       category: item.category || '',
-      serial_number: item.serial_number || '',
+      total_quantity: item.total_quantity || 1,
       status: item.status || 'available',
       location: item.location || '',
       notes: item.notes || '',
@@ -174,11 +197,8 @@ export default function AdminDashboard() {
     loadItems()
   }
 
-  const handleMarkReturned = async (id) => {
-    const { error } = await supabase.rpc('checkout_equipment', {
-      item_id: id,
-      requested_action: 'returned',
-    })
+  const handleReturnCheckout = async (checkoutId) => {
+    const { error } = await supabase.rpc('return_checkout', { checkout_id: checkoutId })
     if (error) setErrorMsg(error.message)
     else loadItems()
   }
@@ -194,10 +214,20 @@ export default function AdminDashboard() {
       <form onSubmit={handleSubmit} className="equipment-form">
         <input name="name" placeholder="Name" value={form.name} onChange={handleChange} required />
         <input name="category" placeholder="Category" value={form.category} onChange={handleChange} />
-        <input name="serial_number" placeholder="Current Item Count" value={form.serial_number} onChange={handleChange} />
+        <label className="file-field">
+          Total quantity owned
+          <input
+            name="total_quantity"
+            type="number"
+            min="1"
+            placeholder="Total quantity owned"
+            value={form.total_quantity}
+            onChange={handleChange}
+            required
+          />
+        </label>
         <select name="status" value={form.status} onChange={handleChange}>
           <option value="available">Available</option>
-          <option value="in_use">In use</option>
           <option value="maintenance">Maintenance</option>
           <option value="decommissioned">Decommissioned</option>
         </select>
@@ -289,9 +319,10 @@ export default function AdminDashboard() {
           <EquipmentCard
             key={item.id}
             item={item}
+            checkouts={checkoutsByEquipment[item.id] || []}
             onEdit={handleEdit}
             onDelete={handleDelete}
-            onMarkReturned={handleMarkReturned}
+            onReturnCheckout={handleReturnCheckout}
           />
         ))}
       </div>

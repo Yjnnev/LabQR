@@ -10,6 +10,8 @@ export default function ItemPage() {
   const { id } = useParams()
   const { session } = useAuth()
   const [equipment, setEquipment] = useState(null)
+  const [available, setAvailable] = useState(null)
+  const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
@@ -34,31 +36,36 @@ export default function ItemPage() {
       }
 
       setEquipment(data)
-      setLoading(false)
+
+      const { data: availableCount } = await supabase.rpc('available_quantity', { item_id: id })
+      if (!cancelled) {
+        setAvailable(availableCount ?? 0)
+        setLoading(false)
+      }
     }
 
     loadItem()
     return () => { cancelled = true }
-  }, [id, session])
+  }, [id])
 
-  const handleAction = async (action) => {
+  const handleCheckout = async () => {
     setActionError(null)
-    const { error } = await supabase.rpc('checkout_equipment', {
+    const { error } = await supabase.rpc('checkout_quantity', {
       item_id: id,
-      requested_action: action,
+      requested_quantity: quantity,
     })
     if (error) {
       setActionError(error.message)
       return
     }
-    setEquipment((prev) => ({
-      ...prev,
-      status: action === 'checked_out' ? 'in_use' : 'available',
-    }))
+    setAvailable((prev) => prev - quantity)
   }
 
   if (loading) return <p className="status-text">Loading item…</p>
   if (error) return <p className="status-text">{error}</p>
+
+  const isOverridden = equipment.status === 'maintenance' || equipment.status === 'decommissioned'
+  const canCheckOut = !isOverridden && available > 0
 
   return (
     <div className="item-page">
@@ -70,8 +77,8 @@ export default function ItemPage() {
 
         <div className="item-card-header">
           <h1>{equipment.name}</h1>
-          <span className={`status-pill status-${equipment.status}`}>
-            {STATUS_LABELS[equipment.status] || equipment.status}
+          <span className={`status-pill status-${isOverridden ? equipment.status : (canCheckOut ? 'available' : 'out_of_stock')}`}>
+            {isOverridden ? STATUS_LABELS[equipment.status] : (canCheckOut ? 'Available' : 'Out of stock')}
           </span>
         </div>
 
@@ -80,7 +87,7 @@ export default function ItemPage() {
             <div><dt>Category</dt><dd>{equipment.category}</dd></div>
           )}
           <div><dt>Location</dt><dd>{equipment.location || '—'}</dd></div>
-          <div><dt>Current Item Count</dt><dd>{equipment.serial_number || '—'}</dd></div>
+          <div><dt>In stock</dt><dd>{available} / {equipment.total_quantity} available</dd></div>
         </dl>
 
         {equipment.notes && <p className="item-notes">{equipment.notes}</p>}
@@ -96,7 +103,15 @@ export default function ItemPage() {
         )}
 
         <div className="item-card-actions">
-          {!session && equipment.status === 'available' && (
+          {isOverridden && (
+            <p className="error-text">This item isn't available for checkout right now.</p>
+          )}
+
+          {!isOverridden && !canCheckOut && (
+            <p className="error-text">Out of stock — none currently available.</p>
+          )}
+
+          {!isOverridden && canCheckOut && !session && (
             <>
               <p className="status-text-inline">Sign in to check out this item.</p>
               <div className="guest-auth-buttons">
@@ -106,18 +121,22 @@ export default function ItemPage() {
             </>
           )}
 
-          {session && equipment.status === 'available' && (
-            <button onClick={() => handleAction('checked_out')}>Check out</button>
-          )}
-
-          {equipment.status === 'in_use' && (
-            <p className="status-text-inline">
-              This item is currently checked out. An admin will process the return.
-            </p>
-          )}
-
-          {equipment.status !== 'available' && equipment.status !== 'in_use' && (
-            <p className="error-text">This item isn't available for checkout right now.</p>
+          {!isOverridden && canCheckOut && session && (
+            <div className="checkout-controls">
+              {equipment.total_quantity > 1 && (
+                <label className="quantity-picker">
+                  Quantity
+                  <input
+                    type="number"
+                    min="1"
+                    max={available}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Math.min(available, Number(e.target.value))))}
+                  />
+                </label>
+              )}
+              <button onClick={handleCheckout}>Check out</button>
+            </div>
           )}
 
           {actionError && <p className="error-text">{actionError}</p>}
