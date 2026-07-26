@@ -16,6 +16,7 @@ export default function ItemPage() {
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [galleryIndex, setGalleryIndex] = useState(null)
+  const [heroOpen, setHeroOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +73,9 @@ export default function ItemPage() {
       <Link to="/browse" className="back-button">← Back to all equipment</Link>
       <div className="item-card">
         {equipment.thumbnail_url && (
-          <img src={equipment.thumbnail_url} alt={equipment.name} className="item-hero-photo" />
+          <button type="button" className="item-hero-photo-button" onClick={() => setHeroOpen(true)}>
+            <img src={equipment.thumbnail_url} alt={equipment.name} className="item-hero-photo" />
+          </button>
         )}
 
         <div className="item-card-header">
@@ -142,6 +145,14 @@ export default function ItemPage() {
           {actionError && <p className="error-text">{actionError}</p>}
         </div>
       </div>
+
+      {heroOpen && (
+        <PhotoGalleryModal
+          photos={[equipment.thumbnail_full_url || equipment.thumbnail_url]}
+          startIndex={0}
+          onClose={() => setHeroOpen(false)}
+        />
+      )}
 
       {galleryIndex !== null && (
         <PhotoGalleryModal

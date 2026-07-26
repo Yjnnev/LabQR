@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './routes/ProtectedRoute'
 import ItemPage from './routes/ItemPage'
 import AdminDashboard from './routes/AdminDashboard'
+import Borrowers from './routes/Borrowers'
 import BrowseEquipment from './routes/BrowseEquipment'
 import Header from './components/Header'
 
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/browse" element={<BrowseEquipment />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/borrowers" element={<ProtectedRoute adminOnly><Borrowers /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

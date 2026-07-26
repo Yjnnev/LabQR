@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import BrowseEquipmentCard from '../components/BrowseEquipmentCard'
+import ScrollToTopButton from '../components/ScrollToTopButton'
 
 export default function BrowseEquipment() {
   const [items, setItems] = useState([])
@@ -13,7 +14,7 @@ export default function BrowseEquipment() {
     async function loadItems() {
       const { data, error } = await supabase
         .from('equipment')
-        .select('id, name, category, status, location, total_quantity, thumbnail_url')
+        .select('id, name, category, status, location, total_quantity, thumbnail_url, thumbnail_full_url')
         .order('name', { ascending: true })
 
       if (error) setError(error.message)
@@ -61,6 +62,8 @@ export default function BrowseEquipment() {
           ))}
         </div>
       )}
+
+      <ScrollToTopButton />
     </div>
   )
 }
