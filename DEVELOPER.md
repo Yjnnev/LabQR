@@ -9,11 +9,14 @@ This covers *how the code actually works* — what each file is for, and how the
 - [Project structure](#project-structure)
 - [File reference](#file-reference)
 - [How auth works](#how-auth-works)
-- [How checkout/return works](#how-checkoutreturn-works)
+- [How checkout/return works (quantity-based)](#how-checkoutreturn-works-quantity-based)
+- [How the "effective status" / partial-checkout display works](#how-the-effective-status--partial-checkout-display-works)
+- [How the admin edit/add modal works](#how-the-admin-editadd-modal-works)
+- [How thumbnail cropping + full-image viewing works](#how-thumbnail-cropping--full-image-viewing-works)
 - [How QR code generation works](#how-qr-code-generation-works)
 - [How browsing/search/filter works](#how-browsingsearchfilter-works)
-- [How the borrower info on admin cards works](#how-the-borrower-info-on-admin-cards-works)
-- [How email alerts work](#how-email-alerts-work-currently-disconnected-see-readme)
+- [How the Borrowers and My Borrows pages work](#how-the-borrowers-and-my-borrows-pages-work)
+- [How email alerts work](#how-email-alerts-work)
 - [Shared conventions worth knowing](#shared-conventions-worth-knowing)
 
 ---
@@ -26,27 +29,38 @@ src/
   index.css                        All styling (no CSS framework used)
   lib/
     supabaseClient.js               Single shared Supabase client instance
-    statusLabels.js                 Shared "available" → "Available" label map
+    statusLabels.js                 Shared "available" -> "Available" label map
     authActions.js                  Google sign-in helper, shared by Header/ItemPage/Login
+    equipmentPhotos.js              Shared upload/delete helpers for equipment-photos storage bucket
+    equipmentStatus.js              Derives display status (adds 'in_use') from raw status + checkouts
+    cropImage.js                    Canvas-based image cropping, used by ThumbnailCropper
   context/
     AuthContext.jsx                 Tracks session + profile (role) app-wide
   routes/
     Login.jsx                       Standalone login screen (rarely reached directly)
-    ProtectedRoute.jsx              Route guard — used only for /admin
-    ItemPage.jsx                    /item/:id — item detail + checkout action
-    BrowseEquipment.jsx             /  and /browse — searchable equipment grid
-    AdminDashboard.jsx              /admin — equipment CRUD + return processing
+    ProtectedRoute.jsx              Route guard — session required, optionally adminOnly
+    ItemPage.jsx                    /item/:id — item detail + quantity checkout + success popup
+    BrowseEquipment.jsx             /  and /browse — searchable equipment grid (public)
+    MyBorrows.jsx                   /my-borrows — a user's own checkout history
+    AdminDashboard.jsx              /admin — equipment CRUD, status filters, search
+    Borrowers.jsx                   /admin/borrowers — full checkout history, all users
   components/
-    Header.jsx                     Persistent top nav: auth state, login/logout
+    Header.jsx                     Persistent top nav: auth state, login/logout, My Borrows/Admin links
+    AdminNav.jsx                    Tab nav shared by AdminDashboard and Borrowers
     EquipmentCard.jsx               Admin dashboard's per-item card
-    BrowseEquipmentCard.jsx         Browse page's per-item card (simpler, clickable)
+    EquipmentFormModal.jsx          Popup form for adding/editing equipment (thumbnail + gallery uploads)
+    StatusSummary.jsx               Clickable, toggleable status-count pill bar
+    ScrollToTopButton.jsx           Floating scroll-to-top button (admin + browse pages)
+    BrowseEquipmentCard.jsx         Browse page's per-item card (clickable thumbnail, links to /item/:id)
+    CheckoutSuccessModal.jsx        "You successfully checked out ..." popup
+    PhotoGalleryModal.jsx           Lightbox used for gallery photos and full-res thumbnail viewing
+    ThumbnailCropper.jsx            Crop UI shown after picking a thumbnail file
     QRCodeCell.jsx                  Renders + lets admin download a QR code
 
-supabase-functions/
-  notify-admin/index.ts             Edge function: emails on checkout/return
-
-migrations/
-  schema.sql, 002–006*.sql          Run in order against a fresh Supabase project
+supabase/
+  007_thumbnail_full_url.sql       Numbered migrations, tracked from this point forward
+  functions/
+    notify-admin/index.ts           Edge function: readable email to admins on checkout
 ```
 
 ---
@@ -58,20 +72,31 @@ migrations/
 | `App.jsx` | Defines every route and wraps the app in `AuthProvider` + `BrowserRouter` |
 | `index.css` | All visual styling app-wide — no CSS framework, just shared classes |
 | `lib/supabaseClient.js` | Creates the one Supabase client instance every other file imports |
-| `lib/statusLabels.js` | Maps raw status values (`in_use`) to display labels (`In use`) |
+| `lib/statusLabels.js` | Maps raw/effective status values (`in_use`) to display labels (`In use`) |
 | `lib/authActions.js` | `signInWithGoogle()` — the single Google OAuth call, shared by 3 components |
+| `lib/equipmentPhotos.js` | `uploadPhoto()` / `deletePhotoFile()` — shared by the form modal and the delete-item flow, so there's one place that knows how storage paths map to public URLs |
+| `lib/equipmentStatus.js` | `getEffectiveStatus(item, checkedOutQuantity)` — see dedicated section below |
+| `lib/cropImage.js` | `getCroppedImageFile()` — draws a cropped region to canvas, returns it as an uploadable `File` |
 | `context/AuthContext.jsx` | Tracks the current session + profile (role); exposes `useAuth()` app-wide |
 | `routes/Login.jsx` | Standalone login screen — rarely hit directly since login is contextual now |
-| `routes/ProtectedRoute.jsx` | Route guard checking for a session (and optionally admin role); used only on `/admin` |
-| `routes/ItemPage.jsx` | `/item/:id` — shows one item's details and the checkout action |
+| `routes/ProtectedRoute.jsx` | Route guard: requires a session; pass `adminOnly` to also require `profile.role === 'admin'` |
+| `routes/ItemPage.jsx` | `/item/:id` — item details, quantity picker, checkout, success popup, full-image viewing |
 | `routes/BrowseEquipment.jsx` | `/` and `/browse` — searchable, filterable equipment grid, public access |
-| `routes/AdminDashboard.jsx` | `/admin` — full equipment CRUD plus the "Mark Returned" action |
-| `components/Header.jsx` | Persistent nav bar: brand link, admin link, login/logout buttons |
-| `components/EquipmentCard.jsx` | One equipment card as rendered in the admin dashboard grid |
-| `components/BrowseEquipmentCard.jsx` | One equipment card as rendered in the public browse grid |
+| `routes/MyBorrows.jsx` | `/my-borrows` — any signed-in user's own checkout history |
+| `routes/AdminDashboard.jsx` | `/admin` — equipment CRUD via modal, status pill filters, search |
+| `routes/Borrowers.jsx` | `/admin/borrowers` — checkout history across every user, with search + active filter |
+| `components/Header.jsx` | Persistent nav bar: brand link, My Borrows, admin link, login/logout buttons |
+| `components/AdminNav.jsx` | Tab links between Equipment and Borrowers, shown on both admin pages |
+| `components/EquipmentCard.jsx` | One equipment card in the admin grid — computes and shows the *effective* status |
+| `components/EquipmentFormModal.jsx` | Add/edit form in a popup; manages thumbnail (cropped + full-res) and gallery photo lifecycle |
+| `components/StatusSummary.jsx` | Renders one clickable pill per status; counts use effective status too |
+| `components/ScrollToTopButton.jsx` | Appears after scrolling past a threshold; smooth-scrolls to top on click |
+| `components/BrowseEquipmentCard.jsx` | Public browse card; thumbnail click opens the full-res image without navigating |
+| `components/CheckoutSuccessModal.jsx` | Simple popup dialog shown after a successful checkout |
+| `components/PhotoGalleryModal.jsx` | Photo lightbox with prev/next; reused for both the gallery and full-res thumbnail viewing |
+| `components/ThumbnailCropper.jsx` | Crop UI shown right after a thumbnail file is picked, before upload |
 | `components/QRCodeCell.jsx` | Draws a QR code to canvas and offers a PNG download |
-| `supabase-functions/notify-admin/index.ts` | Edge function emailing admins on checkout, students on return |
-| `migrations/*.sql` | Database schema + policies + the `checkout_equipment()` function, applied in numeric order |
+| `supabase/functions/notify-admin/index.ts` | Edge function emailing admins a readable summary on checkout |
 
 ---
 
@@ -98,111 +123,116 @@ useEffect(() => {
 }, [])
 ```
 
-2. Once a session exists, fetches that user's `profiles` row — this is where `role` (`student`/`admin`) comes from:
-
-```jsx
-useEffect(() => {
-  if (!session?.user) { setProfile(null); return }
-  supabase.from('profiles').select('*').eq('id', session.user.id).single()
-    .then(({ data }) => setProfile(data))
-}, [session])
-```
+2. Once a session exists, fetches that user's `profiles` row — this is where `role` (`student`/`admin`) comes from.
 
 Any component can read `{ session, profile, signOut }` via `useAuth()`. There's no prop-drilling — `AuthProvider` wraps the whole app in `App.jsx`.
 
-**Route protection — `routes/ProtectedRoute.jsx`:** only used on `/admin`. It checks `profile?.role === 'admin'` and renders a "no access" message otherwise. Every other route is intentionally public — see the Guest Browsing section below for why.
+**Route protection — `routes/ProtectedRoute.jsx`:** used on `/admin`, `/admin/borrowers` (with `adminOnly`), and `/my-borrows` (without it — any signed-in user). It checks for a session first (rendering `<Login />` if none), then `profile?.role === 'admin'` when `adminOnly` is passed.
 
-**Login — `lib/authActions.js`, called from `Header.jsx`, `ItemPage.jsx`, and `Login.jsx`:**
+**Login — `lib/authActions.js`, called from `Header.jsx`, `ItemPage.jsx`, and `Login.jsx`:** `signInWithGoogle()` defaults `redirectTo` to `window.location.href`, so signing in from an item page returns you to that same item, ready to check out, instead of dumping you on the homepage.
 
-```js
-export async function signInWithGoogle(redirectTo = window.location.href) {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo },
-  })
-  if (error) console.error('Login error:', error.message)
-}
-```
-
-All three call sites just do `signInWithGoogle()` — the default parameter means "come back to wherever I currently am" applies automatically without each caller having to pass it explicitly. `redirectTo` defaulting to `window.location.href` is the key detail — it sends the user back to *whatever page they were on*, not a fixed URL. That's why clicking "Sign in" on an item page returns you to that same item, ready to check out, instead of dumping you on the homepage.
-
-**Logout — `Header.jsx`:**
-
-```js
-const handleSignOut = async () => {
-  await signOut()
-  navigate('/')
-}
-```
-
-Always navigates to `/` after signing out. This was a deliberate fix — without it, logging out while on `/admin` and logging back in as a non-admin would strand you on a page you no longer had access to.
+**Logout — `Header.jsx`:** always navigates to `/` after signing out, so logging out while on `/admin` never strands a now-unauthorized user on a page they can't see.
 
 ---
 
-## How checkout/return works
+## How checkout/return works (quantity-based)
 
-This is the most "backend logic" part of the app, and it deliberately does **not** let the frontend update `equipment` directly. Instead there's one Postgres function both actions go through.
+Unlike a single-item "one equipment row = one checkout" design, equipment here has a `total_quantity`, and any number of students can hold some of that stock simultaneously. The frontend never writes to `equipment` or `checkouts` directly — everything goes through two Postgres functions.
 
-**File: `migrations/005_checked_out_at.sql`** (current version of the function — it's been revised twice since `002`):
-
-```sql
-create or replace function public.checkout_equipment(item_id uuid, requested_action log_action)
-returns void as $$
-declare
-  current_status equipment_status;
-  current_holder uuid;
-begin
-  select status, checked_out_by into current_status, current_holder
-  from equipment where id = item_id;
-
-  if requested_action = 'checked_out' then
-    if current_status != 'available' then
-      raise exception 'This item is not available for checkout.';
-    end if;
-
-    update equipment
-    set status = 'in_use', checked_out_by = auth.uid(), checked_out_at = now()
-    where id = item_id;
-
-    insert into usage_logs (equipment_id, user_id, performed_by, action)
-    values (item_id, auth.uid(), auth.uid(), requested_action);
-
-  elsif requested_action = 'returned' then
-    if not public.is_admin() then
-      raise exception 'Only an admin can mark equipment as returned.';
-    end if;
-    ...
-```
-
-Why a function instead of RLS-permitted direct updates: students need to flip `equipment.status` on checkout, but should never be allowed to edit equipment freely (name, location, etc). A `security definer` function lets it run with elevated privileges for *exactly this one narrow operation*, while RLS still blocks any direct `UPDATE equipment` from a student role.
+**`checkout_quantity(item_id, requested_quantity)`** — validates there's enough stock left (via `available_quantity()`), inserts a `checkouts` row, logs a `usage_logs` entry, then recomputes `equipment.status` (`available` if any stock remains, `out_of_stock` if not — see the effective-status section for why `in_use` is never set here).
 
 **Frontend call site — `routes/ItemPage.jsx`:**
 
 ```js
-const handleAction = async (action) => {
-  const { error } = await supabase.rpc('checkout_equipment', {
+const handleCheckout = async () => {
+  setActionError(null)
+  const { error } = await supabase.rpc('checkout_quantity', {
     item_id: id,
-    requested_action: action,
+    requested_quantity: quantity,
   })
-  ...
+  if (error) {
+    setActionError(error.message)
+    return
+  }
+  setAvailable((prev) => prev - quantity)
+  setSuccessMsg(`You successfully checked out ${quantity > 1 ? `${quantity} × ` : ''}${equipment.name}!`)
+  setShowSuccessModal(true)
 }
 ```
 
-Only `'checked_out'` is ever called from here — the UI simply doesn't render a "Return" button for students anymore (removed in the admin-only-return revision). The button that calls `requested_action: 'returned'` lives only in:
+**`return_checkout(checkout_id)`** — admin-only (raises an exception if `is_admin()` is false, enforced at the database layer, not just hidden in the UI); marks that specific `checkouts` row returned, logs it, and updates `equipment.status`.
 
-**`routes/AdminDashboard.jsx`:**
+**Call sites:** both `EquipmentCard.jsx` (admin dashboard) and `Borrowers.jsx` call this identically:
 
 ```js
-const handleMarkReturned = async (id) => {
-  const { error } = await supabase.rpc('checkout_equipment', {
-    item_id: id,
-    requested_action: 'returned',
-  })
-  ...
+const { error } = await supabase.rpc('return_checkout', { checkout_id: checkoutId })
+```
+
+Because it's keyed by `checkout_id` rather than `equipment_id`, returning one student's checkout never touches anyone else's simultaneous checkout of the same item.
+
+---
+
+## How the "effective status" / partial-checkout display works
+
+**File: `lib/equipmentStatus.js`**
+
+The `equipment.status` enum has five values (`available`, `in_use`, `out_of_stock`, `maintenance`, `decommissioned`), but the database functions above only ever *set* it to `available` or `out_of_stock` (plus whatever an admin manually sets for `maintenance`/`decommissioned`). `in_use` is never assigned by the database — "available" there just means "some quantity remains," which is correct for a shared pool but not very informative when, say, 1 of 3 microscopes is out.
+
+`getEffectiveStatus(item, checkedOutQuantity)` derives a better status client-side:
+
+```js
+export function getEffectiveStatus(item, checkedOutQuantity) {
+  if (item.status === 'maintenance' || item.status === 'decommissioned') {
+    return item.status
+  }
+
+  const available = item.total_quantity - checkedOutQuantity
+
+  if (available <= 0) return 'out_of_stock'
+  if (checkedOutQuantity > 0) return 'in_use'
+  return 'available'
 }
 ```
 
-Even if someone bypassed the UI and called the RPC directly as a non-admin, the SQL function itself checks `public.is_admin()` and raises an exception — the restriction is enforced at the database layer, not just hidden in the frontend.
+Every place that displays or filters by status uses this instead of the raw column: `EquipmentCard.jsx` (the pill on each card), `StatusSummary.jsx` (both the counts and what each pill filters by), and `AdminDashboard.jsx`'s `filteredItems` memo. All three need `checkedOutQuantity`, which comes from `checkoutsByEquipment` — a map of `equipment_id -> [active checkouts]` built once in `AdminDashboard.loadItems()` and passed down as a prop.
+
+If you ever query `equipment.status` directly in SQL expecting it to reflect partial checkouts, it won't — join against `checkouts` for that, same as this file does in JS.
+
+---
+
+## How the admin edit/add modal works
+
+**File: `components/EquipmentFormModal.jsx`**, opened from `AdminDashboard.jsx`
+
+`AdminDashboard` tracks a single `modalItem` state with three meaningful values: `undefined` (modal closed), `null` (adding a new item), or an equipment object (editing that item). The modal itself doesn't know or care which — `editingId = item?.id ?? null` is the only branch point, used to decide between a Postgres `insert` and `update` on submit.
+
+**Photo lifecycle** is the trickiest part, since every equipment item can have a cropped thumbnail, an original full-res thumbnail, and a gallery of extra photos, any of which might be added, replaced, or removed independently in one edit:
+
+- On submit, if a *new* thumbnail file was picked, both the cropped version and its pre-crop original get uploaded, and whatever was there before gets deleted from storage.
+- If the thumbnail was removed without a replacement, both old files get deleted and both URLs are set to `null`.
+- Gallery photos: newly added files get uploaded and appended; anything present in the original snapshot but missing from the current list gets deleted.
+
+All uploads/deletes go through `lib/equipmentPhotos.js` so there's one implementation of "how does a public URL map back to a storage path," shared with `AdminDashboard.handleDelete()` (which cleans up all of an item's photos, including `thumbnail_full_url`, when the item itself is deleted).
+
+---
+
+## How thumbnail cropping + full-image viewing works
+
+**Files: `components/ThumbnailCropper.jsx`, `lib/cropImage.js`, `components/PhotoGalleryModal.jsx`**
+
+When an admin picks a thumbnail file in `EquipmentFormModal`, it's held as `pendingCropFile` and `ThumbnailCropper` opens over it. `onCropComplete` receives the cropped result, but the modal also stashes the *original, pre-crop* file at that same moment:
+
+```js
+onCropComplete={(croppedFile) => {
+  setThumbnailFile(croppedFile)
+  setThumbnailFullFile(pendingCropFile)   // the untouched original
+  setPendingCropFile(null)
+}}
+```
+
+Both get uploaded on submit — the cropped one becomes `thumbnail_url` (shown everywhere as a small image), the original becomes `thumbnail_full_url`. Anywhere a thumbnail is shown to a student (`BrowseEquipmentCard.jsx`, `ItemPage.jsx`'s hero photo), clicking it opens `PhotoGalleryModal` with `[thumbnail_full_url || thumbnail_url]` — falling back to the cropped version for equipment added before this feature existed, since older rows have no `thumbnail_full_url` yet.
+
+`BrowseEquipmentCard.jsx` needs a bit of extra care since the whole card is a `<Link>`: the thumbnail is a `<span role="button">` with `onClick` that calls `e.preventDefault(); e.stopPropagation()` before opening its own local modal state, so clicking the photo doesn't also navigate to the item page.
 
 ---
 
@@ -210,27 +240,7 @@ Even if someone bypassed the UI and called the RPC directly as a non-admin, the 
 
 **File: `components/QRCodeCell.jsx`**
 
-Uses the `qrcode` npm package to draw directly onto a `<canvas>` element, then offers a download by reading the canvas back out as a PNG data URL:
-
-```jsx
-const canvasRef = useRef(null)
-const url = `${window.location.origin}/item/${itemId}`
-
-useEffect(() => {
-  QRCode.toCanvas(canvasRef.current, url, { width: 96, margin: 1 })
-}, [url])
-
-const handleDownload = () => {
-  const link = document.createElement('a')
-  link.download = `${itemName.replace(/\s+/g, '-').toLowerCase()}-qr.png`
-  link.href = canvasRef.current.toDataURL('image/png')
-  link.click()
-}
-```
-
-Key detail: the encoded URL uses `window.location.origin` at render time — meaning **QR codes generated locally point to `localhost`, and ones generated on the live site point to your production domain.** Always regenerate/reprint QR codes from wherever you intend students to actually scan them from.
-
-This component is used inside `EquipmentCard.jsx` (admin dashboard only) — students never see the raw QR image, they just scan the printed sticker.
+Uses the `qrcode` npm package to draw directly onto a `<canvas>` element, then offers a download by reading the canvas back out as a PNG data URL. The encoded URL uses `window.location.origin` at render time — **QR codes generated locally point to `localhost`, and ones generated on the live site point to your production domain.** Always regenerate/reprint QR codes from wherever you intend students to actually scan them from.
 
 ---
 
@@ -238,78 +248,56 @@ This component is used inside `EquipmentCard.jsx` (admin dashboard only) — stu
 
 **File: `routes/BrowseEquipment.jsx`**
 
-Fetches all equipment once, then filters client-side — no server round-trip per keystroke, since lab inventories are small enough that this is simpler and faster than debounced server queries:
+Fetches all equipment once (including `thumbnail_full_url` now, for the click-to-zoom feature), then filters client-side — lab inventories are small enough that this is simpler and faster than debounced server queries. The category dropdown's options are derived from whatever categories actually exist in the fetched data, not a fixed list — adding a new category is just typing a new one into the equipment form, no schema change needed.
 
-```js
-const filtered = items.filter((item) => {
-  const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase())
-  const matchesCategory = category === 'all' || item.category === category
-  return matchesSearch && matchesCategory
-})
-```
+**Guest access:** this page and `ItemPage.jsx` intentionally have no `ProtectedRoute` wrapper — the `equipment` SELECT RLS policy includes the `anon` role. Only the checkout action requires a session, enforced both in the UI and by the database (`checkout_quantity()` uses `auth.uid()`, which is `null` for anonymous requests).
 
-The category dropdown's options are derived from whatever categories actually exist in the fetched data, not a fixed list:
-
-```js
-const categories = ['all', ...new Set(items.map((i) => i.category).filter(Boolean))]
-```
-
-This means adding a new category is as simple as typing a new one into the equipment form — no schema change, no dropdown to update elsewhere. (Trade-off: typos create a new "category" silently — fine at current scale, but the first thing to fix if categories start multiplying inconsistently.)
-
-**Guest access:** this page (and `ItemPage.jsx`) intentionally has no `ProtectedRoute` wrapper — see `migrations/006_guest_browsing.sql`, which changed the `equipment` SELECT policy to include the `anon` role:
-
-```sql
-create policy "Anyone can view equipment"
-  on equipment for select
-  to authenticated, anon
-  using (true);
-```
-
-Only the *checkout action* still requires a session — enforced both in the UI (`ItemPage.jsx` conditionally shows Sign in/Sign up buttons instead of a Check out button when `!session`) and in the database (`checkout_equipment()` uses `auth.uid()`, which is `null` for anonymous requests, and the `usage_logs.user_id` column is `not null`, so an anonymous call would fail even if someone bypassed the UI).
+**Admin-side search + status filtering — `routes/AdminDashboard.jsx` + `components/StatusSummary.jsx`:** `activeStatuses` is a `Set`; clicking a pill toggles membership in it (multi-select — several statuses can be active at once). `filteredItems` is a `useMemo` combining the search term with `activeStatuses.size === 0 ? show everything : activeStatuses.has(effectiveStatus)`. The pills' *counts*, however, are always computed from the full unfiltered `items` list, so the numbers always reflect true totals even while filtered down.
 
 ---
 
-## How the borrower info on admin cards works
+## How the Borrowers and My Borrows pages work
 
-**File: `routes/AdminDashboard.jsx`**
+**Files: `routes/Borrowers.jsx` (admin, all users) and `routes/MyBorrows.jsx` (any signed-in user, own history only)**
 
-Rather than a second query, the borrower's email comes from a single Postgres embed via the `checked_out_by` foreign key:
+Both are thin wrappers around the same underlying data — a `checkouts` row joined to `equipment` (name/category/location) and `profiles` (borrower). `Borrowers.jsx` additionally embeds `profiles!returned_by` to show which admin processed each return, and has no user filter (RLS already restricts non-admins to their own rows, but admins can see everyone's via the `"Users can view their own checkouts, admins view all"` policy). `MyBorrows.jsx` adds `.eq('user_id', session.user.id)` explicitly for clarity, even though RLS would already scope it that way for a non-admin caller.
 
-```js
-const { data } = await supabase
-  .from('equipment')
-  .select('*, borrower:profiles!checked_out_by(email, full_name)')
-  .order('created_at', { ascending: false })
-```
-
-`profiles!checked_out_by` tells PostgREST which foreign key to follow (needed since `profiles` could theoretically be reached from equipment via more than one path in the future). The result lands in `item.borrower.email` / `item.borrower.full_name`, consumed directly in `components/EquipmentCard.jsx`.
+Both reuse the same `.equipment-table` CSS class (originally unused leftover styling from an earlier table-based admin view) rather than each inventing their own table styles.
 
 ---
 
-## How email alerts work (currently disconnected, see README)
+## How email alerts work
 
-**File: `supabase-functions/notify-admin/index.ts`**
+**File: `supabase/functions/notify-admin/index.ts`**
 
-A Supabase Edge Function (Deno runtime) triggered by a Database Webhook on `usage_logs` INSERT. It:
-
-1. Ignores `'viewed'` events entirely — only reacts to `'checked_out'` / `'returned'`.
-2. Uses the **service role key** (auto-injected as `SUPABASE_SERVICE_ROLE_KEY`, no manual secret needed) to look up the equipment name and the relevant student's profile, bypassing RLS since this runs server-side, not as a logged-in user.
-3. Picks the recipient based on the action:
+A Supabase Edge Function (Deno runtime) triggered by a Database Webhook on `usage_logs` INSERT, filtered to `action === 'checked_out'`. The webhook payload only contains raw IDs (`equipment_id`, `user_id`, etc.), so the function uses a service-role Supabase client — `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected into edge functions, no manual secret needed — to look up the equipment name/location, the borrower's name, and the active checkout's quantity, in parallel:
 
 ```ts
-const recipient = isReturn
-  ? studentProfile?.email                                    // notify the student
-  : (admins || []).map((a) => a.email).filter(Boolean)        // notify every admin
+const [{ data: equipment }, { data: borrower }, { data: checkout }] = await Promise.all([
+  supabase.from('equipment').select('name, location').eq('id', record.equipment_id).single(),
+  supabase.from('profiles').select('full_name, email').eq('id', record.user_id).single(),
+  supabase.from('checkouts')
+    .select('quantity')
+    .eq('equipment_id', record.equipment_id)
+    .eq('user_id', record.user_id)
+    .is('returned_at', null)
+    .order('checked_out_at', { ascending: false })
+    .limit(1)
+    .maybeSingle(),
+])
 ```
 
-Admin recipients are pulled live from `profiles where role = 'admin'` at send-time — no hardcoded email list, so promoting a new admin automatically includes them in future alerts.
+It then sends a subject like `LabQR: Maria Santos checked out Digital Multimeter` and a small HTML table (Item, Quantity, Location, Checked-out time) via Resend, instead of the raw-IDs-and-ISO-timestamp text it used to send.
 
-It's currently not wired to a live webhook (put on hold to deal with later) — see `README.md`'s Deployment section for the redeploy steps whenever you pick this back up.
+**Important:** editing `index.ts` only changes the file on disk. The function only updates on Supabase's servers after running `npx supabase functions deploy notify-admin` — see `README.md`'s Email alerts section for the full command sequence, and `npx supabase functions logs notify-admin` for debugging if an email looks wrong.
 
 ---
 
 ## Shared conventions worth knowing
 
-- **Status labels** (`lib/statusLabels.js`) are imported everywhere a status needs a human-readable name, instead of each component hardcoding its own copy — keep new status-displaying components importing from here rather than re-defining the map.
-- **CSS classes are shared, not component-scoped** — e.g. `.status-pill` + `.status-available` etc. are used by both `EquipmentCard` and `BrowseEquipmentCard` and the `ItemPage` hero card. If you restyle statuses, one edit in `index.css` covers all three.
-- **All database writes that matter go through RPC or RLS-guarded direct calls** — there's no separate backend server; Supabase's Postgres + RLS + the `checkout_equipment()` function *is* the backend logic layer. When adding a new feature that needs permission rules, the pattern to follow is: write a Postgres function if the rule is more complex than "can this role touch this row," otherwise a plain RLS policy is enough (see `schema.sql` for policy examples).
+- **Status labels** (`lib/statusLabels.js`) are imported everywhere a status needs a human-readable name, instead of each component hardcoding its own copy.
+- **Effective status** (`lib/equipmentStatus.js`) should be used instead of raw `item.status` anywhere partial checkouts matter for display or filtering — see the dedicated section above. Don't reintroduce a raw `item.status` pill somewhere new without checking whether it should actually be the effective one.
+- **CSS classes are shared, not component-scoped** — e.g. `.status-pill` + `.status-available` etc. are used across `EquipmentCard`, `BrowseEquipmentCard`, `ItemPage`'s hero card, and the clickable pills in `StatusSummary`. If you restyle statuses, one edit in `index.css` covers all of them — but note `StatusSummary`'s pills have their own hover/active color rules layered on top (`.status-summary .status-available:hover`, etc.), since those needed to look different from the static, non-interactive pills elsewhere.
+- **Photo storage helpers are centralized** in `lib/equipmentPhotos.js` — any new feature that uploads/deletes equipment photos should use `uploadPhoto()` / `deletePhotoFile()` rather than reimplementing the storage-path-from-URL parsing.
+- **All database writes that matter go through RPC or RLS-guarded direct calls** — there's no separate backend server; Supabase's Postgres + RLS + the functions listed above *is* the backend logic layer. When adding a feature that needs permission rules more complex than "can this role touch this row," write a Postgres function; otherwise a plain RLS policy is enough.
+- **Modals share one CSS pattern** (`.modal-overlay` + a content class per modal — `.equipment-modal`, `.checkout-success-modal`, `.gallery-modal`) — clicking the backdrop closes them (`onClick` on the overlay checking `e.target === e.currentTarget`, or `e.stopPropagation()` on the inner content), which is the pattern to copy for any new modal.

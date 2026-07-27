@@ -18,6 +18,7 @@ export default function Header() {
       <div className="app-header-user">
         {session ? (
           <>
+            <Link to="/my-borrows" className="app-header-link">My Borrows</Link>
             {profile?.role === 'admin' && (
               <Link to="/admin" className="app-header-link">Admin Dashboard</Link>
             )}

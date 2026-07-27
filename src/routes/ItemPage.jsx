@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { STATUS_LABELS } from '../lib/statusLabels'
 import { signInWithGoogle } from '../lib/authActions'
 import PhotoGalleryModal from '../components/PhotoGalleryModal'
+import CheckoutSuccessModal from '../components/CheckoutSuccessModal'
 
 export default function ItemPage() {
   const { id } = useParams()
@@ -15,6 +16,8 @@ export default function ItemPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
+  const [successMsg, setSuccessMsg] = useState(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(null)
   const [heroOpen, setHeroOpen] = useState(false)
 
@@ -60,6 +63,8 @@ export default function ItemPage() {
       return
     }
     setAvailable((prev) => prev - quantity)
+    setSuccessMsg(`You successfully checked out ${quantity > 1 ? `${quantity} × ` : ''}${equipment.name}!`)
+    setShowSuccessModal(true)
   }
 
   if (loading) return <p className="status-text">Loading item…</p>
@@ -145,6 +150,13 @@ export default function ItemPage() {
           {actionError && <p className="error-text">{actionError}</p>}
         </div>
       </div>
+
+      {showSuccessModal && (
+        <CheckoutSuccessModal
+          message={successMsg}
+          onClose={() => setShowSuccessModal(false)}
+        />
+      )}
 
       {heroOpen && (
         <PhotoGalleryModal

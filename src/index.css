@@ -96,6 +96,48 @@ button:hover {
   font-size: 0.9rem;
 }
 
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.checkout-success-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 340px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+  animation: fade-in 0.2s ease;
+}
+
+.checkout-success-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.checkout-success-modal p {
+  margin: 0;
+  font-size: 1rem;
+  color: #1a1a1a;
+}
+
+.checkout-success-modal button {
+  width: 100%;
+}
+
 /* Admin tab nav */
 
 .admin-nav {
