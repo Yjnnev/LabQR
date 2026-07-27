@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { formatDateTime } from '../lib/formatDate'
 import AdminNav from '../components/AdminNav'
 
 export default function Borrowers() {
@@ -121,7 +122,7 @@ export default function Borrowers() {
                   )}
                 </td>
                 <td>{c.quantity}</td>
-                <td>{new Date(c.checked_out_at).toLocaleString()}</td>
+                <td>{formatDateTime(c.checked_out_at)}</td>
                 <td>
                   <span className={`status-pill ${c.returned_at ? 'status-available' : 'status-in_use'}`}>
                     {c.returned_at ? 'Returned' : 'Checked out'}
@@ -130,7 +131,7 @@ export default function Borrowers() {
                 <td>
                   {c.returned_at ? (
                     <>
-                      {new Date(c.returned_at).toLocaleString()}
+                      {formatDateTime(c.returned_at)}
                       {c.returned_by_profile?.full_name && (
                         <>
                           <br />

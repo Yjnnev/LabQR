@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
     const borrowerName = borrower?.full_name || borrower?.email || 'Someone'
     const quantity = checkout?.quantity ?? 1
 
-    const checkedOutAt = new Date(record.created_at).toLocaleString('en-US', {
+    const checkedOutAt = new Date(record.created_at).toLocaleString('en-PH', {
+      timeZone: 'Asia/Manila',
       dateStyle: 'medium',
       timeStyle: 'short',
     })

@@ -1,6 +1,7 @@
 import QRCodeCell from './QRCodeCell'
 import { STATUS_LABELS } from '../lib/statusLabels'
 import { getEffectiveStatus } from '../lib/equipmentStatus'
+import { formatDate } from '../lib/formatDate'
 
 export default function EquipmentCard({ item, checkouts, onEdit, onDelete, onReturnCheckout }) {
   const checkedOutQuantity = checkouts.reduce((sum, c) => sum + c.quantity, 0)
@@ -37,7 +38,7 @@ export default function EquipmentCard({ item, checkouts, onEdit, onDelete, onRet
             <div key={c.id} className="checkout-row">
               <span>
                 {c.borrower?.email || 'Unknown'} — {c.quantity}
-                {' '}(since {new Date(c.checked_out_at).toLocaleDateString()})
+                {' '}(since {formatDate(c.checked_out_at)})
               </span>
               <button onClick={() => onReturnCheckout(c.id)}>Mark Returned</button>
             </div>

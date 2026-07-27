@@ -54,16 +54,17 @@ export default function ItemPage() {
 
   const handleCheckout = async () => {
     setActionError(null)
+    const requestedQuantity = Number(quantity) || 1
     const { error } = await supabase.rpc('checkout_quantity', {
       item_id: id,
-      requested_quantity: quantity,
+      requested_quantity: requestedQuantity,
     })
     if (error) {
       setActionError(error.message)
       return
     }
-    setAvailable((prev) => prev - quantity)
-    setSuccessMsg(`You successfully checked out ${quantity > 1 ? `${quantity} × ` : ''}${equipment.name}!`)
+    setAvailable((prev) => prev - requestedQuantity)
+    setSuccessMsg(`You successfully checked out ${requestedQuantity > 1 ? `${requestedQuantity} × ` : ''}${equipment.name}!`)
     setShowSuccessModal(true)
   }
 
@@ -139,7 +140,22 @@ export default function ItemPage() {
                     min="1"
                     max={available}
                     value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, Math.min(available, Number(e.target.value))))}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      if (raw === '') {
+                        setQuantity('')
+                        return
+                      }
+                      const num = Number(raw)
+                      if (!Number.isNaN(num)) setQuantity(num)
+                    }}
+                    onBlur={() => {
+                      setQuantity((prev) => {
+                        const num = Number(prev)
+                        if (prev === '' || Number.isNaN(num) || num < 1) return 1
+                        return Math.min(available, num)
+                      })
+                    }}
                   />
                 </label>
               )}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { formatDateTime } from '../lib/formatDate'
 import { useAuth } from '../context/AuthContext'
 
 export default function MyBorrows() {
@@ -89,13 +90,13 @@ export default function MyBorrows() {
                   )}
                 </td>
                 <td>{c.quantity}</td>
-                <td>{new Date(c.checked_out_at).toLocaleString()}</td>
+                <td>{formatDateTime(c.checked_out_at)}</td>
                 <td>
                   <span className={`status-pill ${c.returned_at ? 'status-available' : 'status-in_use'}`}>
                     {c.returned_at ? 'Returned' : 'Checked out'}
                   </span>
                 </td>
-                <td>{c.returned_at ? new Date(c.returned_at).toLocaleString() : '—'}</td>
+                <td>{c.returned_at ? formatDateTime(c.returned_at) : '—'}</td>
               </tr>
             ))}
           </tbody>
