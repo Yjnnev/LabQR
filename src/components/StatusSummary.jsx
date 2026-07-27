@@ -1,10 +1,13 @@
 import { STATUS_LABELS } from '../lib/statusLabels'
+import { getEffectiveStatus } from '../lib/equipmentStatus'
 
 const STATUS_ORDER = ['available', 'in_use', 'out_of_stock', 'maintenance', 'decommissioned']
 
-export default function StatusSummary({ items, activeStatuses, onToggle }) {
+export default function StatusSummary({ items, checkoutsByEquipment, activeStatuses, onToggle }) {
   const counts = items.reduce((acc, item) => {
-    acc[item.status] = (acc[item.status] || 0) + 1
+    const checkedOutQuantity = (checkoutsByEquipment[item.id] || []).reduce((sum, c) => sum + c.quantity, 0)
+    const status = getEffectiveStatus(item, checkedOutQuantity)
+    acc[status] = (acc[status] || 0) + 1
     return acc
   }, {})
 

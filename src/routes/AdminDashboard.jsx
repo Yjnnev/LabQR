@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { deletePhotoFile } from '../lib/equipmentPhotos'
+import { getEffectiveStatus } from '../lib/equipmentStatus'
 import EquipmentCard from '../components/EquipmentCard'
 import EquipmentFormModal from '../components/EquipmentFormModal'
 import StatusSummary from '../components/StatusSummary'
@@ -89,7 +90,10 @@ export default function AdminDashboard() {
     const term = search.trim().toLowerCase()
 
     return items.filter((item) => {
-      if (activeStatuses.size > 0 && !activeStatuses.has(item.status)) return false
+      const checkedOutQuantity = (checkoutsByEquipment[item.id] || []).reduce((sum, c) => sum + c.quantity, 0)
+      const effectiveStatus = getEffectiveStatus(item, checkedOutQuantity)
+
+      if (activeStatuses.size > 0 && !activeStatuses.has(effectiveStatus)) return false
       if (!term) return true
 
       const haystack = [item.name, item.category, item.location]
@@ -99,14 +103,19 @@ export default function AdminDashboard() {
 
       return haystack.includes(term)
     })
-  }, [items, search, activeStatuses])
+  }, [items, search, activeStatuses, checkoutsByEquipment])
 
   return (
     <div className="admin-dashboard">
       <h1>LabQR Admin</h1>
       <AdminNav />
 
-      <StatusSummary items={items} activeStatuses={activeStatuses} onToggle={toggleStatus} />
+      <StatusSummary
+        items={items}
+        checkoutsByEquipment={checkoutsByEquipment}
+        activeStatuses={activeStatuses}
+        onToggle={toggleStatus}
+      />
 
       <div className="admin-toolbar">
         <input
